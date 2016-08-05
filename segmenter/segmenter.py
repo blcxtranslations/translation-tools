@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import sys
 import marisa_trie
 
 
@@ -23,7 +24,7 @@ class ChineseDict:
     dict_file = [line for line in dict_file if not line.startswith('#')]
     for line in dict_file:
       words = line.split(' ')
-      sound = '[' + line.split('[')[1].split(']')[0] + ']'
+      sound = line.split('[')[1].split(']')[0]
       line0 = words[0].decode('utf-8')
       line1 = words[1].decode('utf-8')
       self.trie.append(line0) # Traditional
@@ -62,35 +63,68 @@ class ChineseDict:
 class Segmenter:
   def __init__(self):
     self.dict = ChineseDict()
+    self.line_width = 50
 
-  def process(self, filename):
-    file = open(filename, 'r').read()
-    file = file.split('\n')
-    file = filter(None, file)
-    segments = []
-    for f in file:
-      segments.append(self.segment(f))
-    return segments
+  def process(self, infile = None, outfile = None):
+    if infile:
+      file = open(infile, 'r')
+    else:
+      file = sys.stdin
+    contents = file.read().split('\n')
+    file.close()
+    contents = filter(None, contents)
+    segments = ""
+    for sentence in contents:
+      segment = self.segment(sentence)
+      segments += self.construct(sentence, segment)
+      break
+    if outfile:
+      file = open(outfile, 'w')
+    else:
+      file = sys.stdout
+    file.write(segments.encode('utf-8'))
+    file.close()
+
+  def construct(self, sentence, segment):
+    return '=' * self.line_width + '\n' + sentence.decode('utf-8') + '\n' + '-' * self.line_width+ '\n' + segment + '\n' + '=' * self.line_width + '\n\n'
 
   def segment(self, file):
     pos = 0
-    defns = []
+    line = ""
+    words = ""
+    defns = ""
     while pos < len(file):
       chars = range(1, self.dict.longest)
       chars.reverse()
       found = False
       for i in chars:
-        word = file[pos : pos + i * 3].decode('utf-8')
+        word = file[pos : pos + i * 3]
+        word = word.decode('utf-8')
         found, defn = self.dict.findword(word)
         if found:
-          defns.append(defn)
+          defn += ' | '
+          if len(defns) / self.line_width < (len(defns) + len(defn)) / self.line_width:
+            line += words + '\n' + defns + '\n'
+            defns = ""
+            words = ""
+          words += word + (len(defn) - len(word) * 2) * ' '
+          defns += defn
+          # defns.append(defn)
           pos += i * 3
           break
       if not found:
         pos += 3
-    print defns
-    return defns
+
+    return line[:-1]
 
 
-segmenter = Segmenter()
-segmenter.process('test.txt')
+
+if __name__ == "__main__":
+  segmenter = Segmenter()
+  argc = len(sys.argv)
+  if argc == 3:
+    segmenter.process(sys.argv[1], sys.argv[2])
+  if argc == 2:
+    segmenter.process(sys.argv[1])
+  else:
+    segmenter.process()
